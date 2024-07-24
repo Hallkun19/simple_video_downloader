@@ -121,11 +121,11 @@ class App(ctk.CTk):
             url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip'
             dst_path = 'ffmpeg-master-latest-win64-gpl-shared.zip'
             urllib.request.urlretrieve(url, dst_path)
-            shutil.unpack_archive(dst_path, 'ffmpeg')
-            shutil.move('ffmpeg/ffmpeg-master-latest-win64-gpl-shared/bin/ffmpeg.exe', '.')
+            shutil.unpack_archive(dst_path, 'ffmpeg_temp')
+            shutil.move('ffmpeg_temp/ffmpeg-master-latest-win64-gpl-shared/bin/', 'ffmpeg/')
             os.remove('ffmpeg-master-latest-win64-gpl-shared.zip')
-            shutil.rmtree('ffmpeg/')
-            self.ffmpeg_path.set(os.path.realpath(os.path.abspath('ffmpeg.exe')))
+            shutil.rmtree('ffmpeg_temp/')
+            self.ffmpeg_path.set(os.path.realpath(os.path.abspath('ffmpeg/ffmpeg.exe')))
 
             
 
