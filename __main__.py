@@ -13,7 +13,6 @@ import re
 import shutil
 import datetime
 import urllib.request, urllib.error
-import glob
 
 DEFAULT_FONT = "游ゴシック"
 DEFAULT_FONT_SIZE = 15
@@ -86,6 +85,16 @@ class App(ctk.CTk):
     def method_in_a_thread(self):
         self.download_start()
 
+    def download_ffmpeg(self):
+        url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip'
+        dst_path = 'ffmpeg-master-latest-win64-gpl-shared.zip'
+        urllib.request.urlretrieve(url, dst_path)
+        shutil.unpack_archive(dst_path, 'ffmpeg_temp')
+        shutil.move('ffmpeg_temp/ffmpeg-master-latest-win64-gpl-shared/bin/', 'ffmpeg/')
+        os.remove('ffmpeg-master-latest-win64-gpl-shared.zip')
+        shutil.rmtree('ffmpeg_temp/')
+        self.ffmpeg_path.set(os.path.realpath(os.path.abspath('ffmpeg/ffmpeg.exe')))
+
     def download_start(self):
         self.export_log(f"download_start()")
         self.progress_finish_flag.set("false")
@@ -109,41 +118,39 @@ class App(ctk.CTk):
             self.export_log(f"format error")
             return
 
+
+
         if os.path.isfile("ffmpeg.exe"):
             self.ffmpeg_path.set(os.path.realpath(os.path.abspath('ffmpeg.exe')))
         elif "ffmpeg" in os.environ['Path']:
-            ffmpeg_path = [s for s in os.environ["Path"].split(";") if 'ffmpeg' in s]
+            # "ffmpeg.exe"が存在するか確認する
+            ffmpeg_path = [s for s in os.environ["Path"].split(";") if os.path.exists(s + "\\ffmpeg.exe")]
+            if not ffmpeg_path:
+                self.export_log(f"\"ffmpeg\" is in PATH, but ffmpeg.exe is not found")
+                self.download_ffmpeg(self)
+                return
             ffmpeg_path = ffmpeg_path[0] + "\\ffmpeg.exe"
             print(ffmpeg_path)
             self.ffmpeg_path.set(ffmpeg_path)
         else:
             self.realtime_progress.set("初回準備中...")
-            url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip'
-            dst_path = 'ffmpeg-master-latest-win64-gpl-shared.zip'
-            urllib.request.urlretrieve(url, dst_path)
-            shutil.unpack_archive(dst_path, 'ffmpeg_temp')
-            shutil.move('ffmpeg_temp/ffmpeg-master-latest-win64-gpl-shared/bin/', 'ffmpeg/')
-            os.remove('ffmpeg-master-latest-win64-gpl-shared.zip')
-            shutil.rmtree('ffmpeg_temp/')
-            self.ffmpeg_path.set(os.path.realpath(os.path.abspath('ffmpeg/ffmpeg.exe')))
-
-            
+            self.download_ffmpeg(self)
 
         self.realtime_progress.set("準備中...")
         self.progress_bar.set(0)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(self.download_video, download_url, download_path, file) for file in selected_filetypes]
-            for future in concurrent.futures.as_completed(futures):
-                try:
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(self.download_video, download_url, download_path, file) for file in selected_filetypes]
+                for future in concurrent.futures.as_completed(futures):
                     future.result()
                     self.export_log(f"try future.result()")
-                except Exception as exc:
-                    self.export_log(f"Exception occurred: {exc}")
-                    print(f"Exception occurred: {exc}")
-
-        self.realtime_progress.set("ダウンロード完了！")
-        self.export_log(f"download progress finish")
+            self.realtime_progress.set("ダウンロード完了！")
+            self.export_log(f"download progress finish")
+        except Exception as exc:
+            self.realtime_progress.set("エラーが発生しました")
+            self.export_log(f"Exception occurred: {exc}")
+            print(f"Exception occurred: {exc}")
 
     def progress_hook(self, d):
         if self.progress_finish_flag.get() == "true":
@@ -161,11 +168,6 @@ class App(ctk.CTk):
     def download_video(self, url, path, file):
         playlist_download = self.url_insert_frame.get_checkbox()
         edited_url = url
-
-        """
-        
-            self.export_log(f"remove list url")
-            edited_url = edited_url.split("&list=")[0]"""
 
         mime_type, encoding = guess_type(f"example.{file}")
         ffmpeg_path = self.ffmpeg_path.get()
@@ -213,10 +215,16 @@ class App(ctk.CTk):
                     available_formats = set(fmt['ext'] for fmt in formats)
 
                     if file in available_formats:
-                        option['format'] = f'bestvideo*[ext={file}]+bestaudio[ext=m4a]/best[ext={file}]'
+                        option['format'] = \
+                            f'bestvideo*[ext={file}]+' + \
+                            f'bestaudio[ext=m4a]/' + \
+                            f'best[ext={file}]'
                         self.export_log(f"formats available:{file}")
                     else:
-                        option['format'] = f'bestvideo*+bestaudio/best'
+                        option['format'] = \
+                            f'bestvideo*+' + \
+                            f'bestaudio/' + \
+                            f'best'
                         option['postprocessors'] = [{
                             'key': 'FFmpegVideoConvertor',
                             'preferredformat': file
